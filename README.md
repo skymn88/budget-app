@@ -9,6 +9,7 @@ Telefonda kullanmak için tasarlanmış, aylık gelir-gider ve bakiye takip uygu
 - **Sıklık seçimi:** Her ay, 2, 3, 4, 6 ayda bir veya yılda bir. Çift maaş, yıllık sigorta gibi kalemler için kullanışlıdır.
 - **Aylık bakiye:** Özet sekmesinde her ayın bakiyesi ayrı hesaplanır, aylar birbirine eklenmez.
 - **Öngörü:** Önümüzdeki 6 ayın geliri, gideri, neti ve birikmiş toplamı.
+- **Güncelleme bildirimi (APK):** Yeni bir APK yayınlandığında uygulama açılışta "Yeni sürüm mevcut" uyarısı gösterir ve sürüm sayfasına götürür.
 - **Simgeler:** Kategorilere (maaş, kira, elektrik, market vb.) göre renkli simgeler.
 - **Tek seferlik kayıtlar:** Düzenli olmayan gelir ve giderler tarihiyle eklenir.
 - **Yedekleme:** JSON olarak indirme, panoya kopyalama ve geri yükleme.
@@ -60,6 +61,16 @@ APK'yı bilgisayarına bir şey kurmadan GitHub üzerinde derlersin. `.github/wo
 **Manuel:** **Actions → Android APK → Run workflow**. Çalıştırmanın sayfasındaki **Artifacts** bölümünden de `butcem-apk` dosyası indirilebilir.
 
 Derleme Capacitor 6 ile yapılır; `index.html` ve yanındaki dosyalar uygulamanın içine gömülür.
+
+### Güncelleme bildirimi
+
+APK açıldığında GitHub'daki "Son APK" sürümünün derleme numarasına bakar; kendisinden yeniyse üstte bir uyarı çıkar. **İndir** düğmesi sürüm sayfasını tarayıcıda açar, **Sonra** o sürüm için uyarıyı kapatır. Kontrol yalnızca APK içinde ve internet varken çalışır; web (PWA) sürümü kendini zaten otomatik günceller.
+
+### Güvenlik notları
+
+- Veriler depoya hiçbir şekilde gönderilmez; depoda yalnızca uygulamanın kodu bulunur.
+- `DEBUG_KEYSTORE_BASE64` secret'ı şifreli saklanır, depo herkese açık olsa da görünmez ve iş akışı günlüklerinde maskelenir. Anahtar dosyasını veya base64 metnini **asla depoya yükleme**.
+- İş akışı yalnızca `main`'e yapılan push ve manuel çalıştırmayla tetiklenir; yazma yetkisi olmayan kişiler bunu tetikleyemez.
 
 ### Güncellemelerin üstüne kurulması (sabit imza)
 

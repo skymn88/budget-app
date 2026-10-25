@@ -64,6 +64,10 @@ input,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--l
 .btn.del{background:none;color:var(--exp);border:1px solid var(--exp);margin-top:8px;font-weight:600}
 #toast{position:fixed;left:50%;bottom:130px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:99px;font-size:14px;display:none;z-index:20}
 .pm{margin-bottom:12px}
+#upd:empty{display:none}
+.upd{margin:2px 16px 8px;padding:12px 14px;border-radius:14px;background:var(--grad);color:#fff;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;font-weight:600;box-shadow:0 6px 16px rgba(79,70,229,.3)}
+.upd a{color:#fff;background:rgba(255,255,255,.25);padding:8px 14px;border-radius:10px;text-decoration:none;font-weight:700}
+.upd button{border:0;background:none;color:#fff;opacity:.85;padding:8px 6px;font-size:14px}
 .l{display:flex;align-items:center;min-width:0}
 .ic{width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none;margin-right:12px}
 .bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:10px 0 4px}.bar i{display:block;height:100%;background:var(--exp);border-radius:99px}
@@ -76,6 +80,7 @@ nav button.on i{transform:scale(1.15)}
 <body>
 <div id="app">
   <header><h1 id="title">Bütçem</h1><div class="mnav" id="mnav"></div></header>
+  <div id="upd"></div>
   <main id="main"></main>
   <button class="fab" onclick="openSheet({kind:'new'})" aria-label="Ekle">+</button>
   <nav id="nav"></nav>
@@ -86,6 +91,9 @@ nav button.on i{transform:scale(1.15)}
 
 <script>
 const KEY='butce.v1';
+/* APK derlenirken GitHub Actions bu iki değeri gerçek değerlerle değiştirir; web sürümünde olduğu gibi kalır */
+const BUILD='__BUILD__',REPO='__REPO__';
+const hasBuild=/^\d+$/.test(BUILD)&&/^[\w.-]+\/[\w.-]+$/.test(REPO);
 const CATS={expense:['Kira','Elektrik','Su','Doğalgaz','İnternet / Telefon','Fatura','Market','Ulaşım','Abonelik','Taksit / Kredi','Sağlık','Eğitim','Eğlence','Diğer'],income:['Maaş','Ek gelir','Kira geliri','Diğer']};
 const CI={'Maaş':['💰',145],'Ek gelir':['💵',165],'Kira geliri':['🏘️',200],'Kira':['🏠',25],'Elektrik':['💡',48],'Su':['💧',200],'Doğalgaz':['🔥',15],'İnternet / Telefon':['📡',260],'Fatura':['🧾',45],'Market':['🛒',120],'Ulaşım':['🚌',215],'Abonelik':['📺',280],'Taksit / Kredi':['💳',340],'Sağlık':['💊',350],'Eğitim':['🎓',235],'Eğlence':['🎬',300],'Diğer':['📦',220]};
 const iconOf=(cat,type)=>CI[cat]||[type==='income'?'💰':'📦',type==='income'?145:220];
@@ -221,7 +229,7 @@ function vSet(){
     <button class="btn sec" onclick="document.getElementById('imp').click()">Yedekten yükle</button>
     <input type="file" id="imp" accept=".json,application/json" style="display:none" onchange="importData(this)">
     <button class="btn del" onclick="resetAll()">Tüm verileri sil</button></div>
-  <div class="hint" style="text-align:center">Bütçem · sürüm 1.2</div>`;
+  <div class="hint" style="text-align:center">Bütçem · sürüm 1.3${hasBuild?' · derleme '+BUILD:''}</div>`;
 }
 function saveSet(){
   const v=num(document.getElementById('ob').value);
@@ -333,7 +341,27 @@ function delOne(){ask('Bu kayıt silinsin mi?','Evet, sil',()=>{S.oneoff=S.oneof
 
 let tt;function toast(m){const e=document.getElementById('toast');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',2000)}
 
+/* ---------- güncelleme bildirimi (yalnızca APK içinde) ---------- */
+function skipUpd(n){try{localStorage.setItem('butce.updskip',String(n))}catch(e){}document.getElementById('upd').innerHTML=''}
+function checkUpdate(){
+  try{
+    if(!hasBuild)return;
+    if(!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()))return;
+    fetch('https://api.github.com/repos/'+REPO+'/releases/tags/latest',{headers:{'Accept':'application/vnd.github+json'}})
+      .then(r=>r.ok?r.json():null).then(d=>{
+        if(!d)return;
+        const m=/Derleme numarası:\s*(\d+)/.exec(d.body||'');
+        const n=m?+m[1]:0,url=String(d.html_url||'');
+        if(!n||n<=+BUILD||!url.startsWith('https://github.com/'))return;
+        let skip=0;try{skip=+localStorage.getItem('butce.updskip')||0}catch(e){}
+        if(skip>=n)return;
+        document.getElementById('upd').innerHTML=`<div class="upd"><span>Yeni sürüm mevcut</span><span><a href="${esc(url)}" target="_blank" rel="noopener">İndir</a><button onclick="skipUpd(${n})">Sonra</button></span></div>`;
+      }).catch(()=>{});
+  }catch(e){}
+}
+
 render();
+checkUpdate();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
