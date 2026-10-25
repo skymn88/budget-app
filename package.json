@@ -1,0 +1,13 @@
+{
+  "name": "butcem",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Aylık gelir-gider ve bakiye takibi",
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  }
+}
