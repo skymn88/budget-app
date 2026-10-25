@@ -1,0 +1,67 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Bağımlılıkları kur
+        run: npm install
+
+      - name: Web dosyalarını www klasörüne kopyala
+        run: |
+          mkdir -p www
+          cp index.html manifest.webmanifest sw.js icon-*.png www/
+
+      - name: Android projesini oluştur
+        run: npx cap add android
+
+      - name: Uygulama ikonunu uygula
+        run: |
+          RES=android/app/src/main/res
+          rm -rf "$RES"/mipmap-anydpi-v26
+          for d in "$RES"/mipmap-*; do
+            for n in ic_launcher ic_launcher_round ic_launcher_foreground; do
+              cp icon-192.png "$d/$n.png"
+            done
+          done
+
+      - name: Web dosyalarını Android projesine aktar
+        run: npx cap sync android
+
+      - name: APK derle
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: APK dosyasını adlandır
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk butcem.apk
+
+      - name: Çıktı olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: butcem-apk
+          path: butcem.apk
+
+      - name: Release'e ekle (yalnızca etiket push'unda)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: butcem.apk
