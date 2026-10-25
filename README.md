@@ -7,7 +7,9 @@ Telefonda kullanmak için tasarlanmış, aylık gelir-gider ve bakiye takip uygu
 - **Beklenen ve gerçek değer:** Her kalem için beklenen tutar girilir, ay içinde gerçekleşen tutar ayrıca yazılır. Gerçek değer girilmeyen kalemler beklenen tutarla hesaplanır.
 - **Düzenli kalemler:** Maaş, kira, fatura gibi kalemler her ay otomatik eklenir. İsteğe bağlı bitiş ayı vardır, istenirse sonradan kaldırılabilir.
 - **Sıklık seçimi:** Her ay, 2, 3, 4, 6 ayda bir veya yılda bir. Çift maaş, yıllık sigorta gibi kalemler için kullanışlıdır.
-- **Öngörü:** Önümüzdeki 6 ayın geliri, gideri ve ay sonu bakiyesi.
+- **Aylık bakiye:** Özet sekmesinde her ayın bakiyesi ayrı hesaplanır, aylar birbirine eklenmez.
+- **Öngörü:** Önümüzdeki 6 ayın geliri, gideri, neti ve birikmiş toplamı.
+- **Simgeler:** Kategorilere (maaş, kira, elektrik, market vb.) göre renkli simgeler.
 - **Tek seferlik kayıtlar:** Düzenli olmayan gelir ve giderler tarihiyle eklenir.
 - **Yedekleme:** JSON olarak indirme, panoya kopyalama ve geri yükleme.
 - Açık ve koyu tema (telefon ayarına uyar), internetsiz çalışma.
@@ -26,9 +28,13 @@ Her iki platformda da en kolay yol budur. Mağaza gerekmez.
 
 ### Android: APK
 
-APK dosyası `Releases` sayfasından indirilir.
+APK dosyası her güncellemede otomatik derlenir ve **Releases** sayfasındaki "Son APK" sürümüne eklenir. Sabit indirme adresi:
 
-1. Telefonda **Releases** sayfasından en son sürümdeki `butcem.apk` dosyasını indir.
+```
+https://github.com/KULLANICI/DEPO/releases/latest/download/butcem.apk
+```
+
+1. Telefonda yukarıdaki adresi aç veya **Releases** sayfasından `butcem.apk` dosyasını indir.
 2. Dosyaya dokun. Tarayıcıya veya dosya yöneticisine "bilinmeyen kaynaklardan yükleme" izni vermen istenebilir.
 3. Yüklemeyi onayla. Uygulama "Bütçem" adıyla açılır.
 
@@ -49,18 +55,23 @@ Apple'ın kuralları değişebilir, güncel durumu Apple'ın kendi belgelerinden
 
 APK'yı bilgisayarına bir şey kurmadan GitHub üzerinde derlersin. `.github/workflows/android-apk.yml` bunu otomatik yapar.
 
-**Yöntem 1: manuel çalıştırma**
-1. Depoda **Actions → Android APK → Run workflow** seç.
-2. İş bitince çalıştırmanın sayfasındaki **Artifacts** bölümünden `butcem-apk` dosyasını indir (zip içinden `butcem.apk` çıkar).
+**Otomatik:** `main` dalına her commit'te APK yeniden derlenir ve "Son APK" sürümü güncellenir (5-10 dakika). Sadece `README.md` ve `.gitignore` değişiklikleri derlemeyi tetiklemez.
 
-**Yöntem 2: etiketle Release oluşturma**
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
-İş bitince `butcem.apk` dosyası **Releases** sayfasına otomatik eklenir.
+**Manuel:** **Actions → Android APK → Run workflow**. Çalıştırmanın sayfasındaki **Artifacts** bölümünden de `butcem-apk` dosyası indirilebilir.
 
 Derleme Capacitor 6 ile yapılır; `index.html` ve yanındaki dosyalar uygulamanın içine gömülür.
+
+### Güncellemelerin üstüne kurulması (sabit imza)
+
+Android, bir APK'nın eskisinin üstüne güncelleme olarak kurulması için aynı anahtarla imzalanmasını ister. Varsayılan olarak GitHub her derlemede yeni bir geçici anahtar üretir, bu yüzden güncelleme kurulmaz ve önce eskisini silmen gerekir (veriler de gider).
+
+Bunu önlemek için sabit bir anahtar tanımla:
+
+1. Bir `debug.keystore` anahtarını base64 metnine çevir (`base64 -w0 debug.keystore`).
+2. Depoda **Settings → Secrets and variables → Actions → New repository secret** bölümüne git.
+3. Adı `DEBUG_KEYSTORE_BASE64`, değeri bu metin olsun.
+
+Secret tanımlıysa iş akışı onunla imzalar, tanımlı değilse geçici anahtara döner. Anahtar alias'ı `androiddebugkey`, şifreleri `android` olmalıdır. Derleme numarası her seferinde otomatik artırılır.
 
 ## Veriler ve yedekleme
 
@@ -89,6 +100,6 @@ capacitor.config.json   APK ayarları
 
 ## Nasıl hesaplanır?
 
-- Bir ayın tahmini sonucu = gelirler − giderler. Düzenli kalemde gerçek değer girildiyse o, girilmediyse beklenen tutar kullanılır.
-- Ay sonu bakiye = *Ayarlar*'daki başlangıç bakiyesi + başlangıç ayından o aya kadar tüm ayların neti.
+- **Özet sekmesindeki bakiye yalnızca o ayın kendisidir:** o ayın geliri − gideri. Önceki ayların toplamı eklenmez, her ay ayrı hesaplanır. Düzenli kalemde gerçek değer girildiyse o, girilmediyse beklenen tutar kullanılır.
+- **Öngörü sekmesi** her ayın kendi bakiyesini, altında ise birikmiş toplamı gösterir. Birikmiş toplam = *Ayarlar*'daki başlangıç bakiyesi + başlangıç ayından o aya kadar tüm ayların neti. Ayrıca 6 aylık toplam net üstte gösterilir.
 - Sıklığı N ay olan bir kalem, başlangıç ayından itibaren her N ayda bir görünür.
