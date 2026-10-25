@@ -38,6 +38,9 @@ jobs:
           mkdir -p www
           cp index.html manifest.webmanifest sw.js icon-*.png www/
 
+      - name: Sürüm bilgisini uygulamaya göm (güncelleme bildirimi için)
+        run: sed -i "s#__BUILD__#${{ github.run_number }}#; s#__REPO__#${{ github.repository }}#" www/index.html
+
       - name: Android projesini oluştur
         run: npx cap add android
 
