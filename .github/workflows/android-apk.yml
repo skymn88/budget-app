@@ -36,10 +36,10 @@ jobs:
       - name: Web dosyalarını www klasörüne kopyala
         run: |
           mkdir -p www
-          cp index.html manifest.webmanifest sw.js icon-*.png www/
+          cp -r index.html manifest.webmanifest sw.js icon-*.png shared tools www/
 
       - name: Sürüm bilgisini uygulamaya göm (güncelleme bildirimi için)
-        run: sed -i "s#__BUILD__#${{ github.run_number }}#; s#__REPO__#${{ github.repository }}#" www/index.html
+        run: sed -i "s#__BUILD__#${{ github.run_number }}#; s#__REPO__#${{ github.repository }}#" www/shared/common.js
 
       - name: Android projesini oluştur
         run: npx cap add android
@@ -77,13 +77,13 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: APK dosyasını adlandır
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk butcem.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk sky.apk
 
       - name: Çıktı olarak yükle
         uses: actions/upload-artifact@v4
         with:
-          name: butcem-apk
-          path: butcem.apk
+          name: sky-apk
+          path: sky.apk
 
       - name: latest etiketini bu commit'e taşı
         run: |
@@ -98,5 +98,10 @@ jobs:
           tag_name: latest
           name: Son APK
           body: "Her güncellemede otomatik derlenen son APK. Derleme numarası: ${{ github.run_number }}"
-          files: butcem.apk
+          files: sky.apk
           make_latest: true
+
+      - name: Eski adlı APK dosyasını release'ten kaldır (varsa)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete-asset latest butcem.apk --yes || true

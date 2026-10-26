@@ -1,8 +1,19 @@
-const CACHE = 'butce-v4';
-const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-180.png'];
+/* SKY servis çalışanı: çevrimdışı çalışma.
+   Önce ağdan dener (güncellemeler hemen gelsin), olmazsa önbellekten verir.
+   Araç dosyaları shared/tools.js listesinden otomatik önbelleğe alınır. */
+importScripts('shared/tools.js');
+
+const CACHE = 'sky-v1';
+const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png',
+  'shared/theme.css', 'shared/common.js', 'shared/tools.js'];
+const TOOL_FILES = TOOLS.flatMap(t => (t.files || ['index.html', 'app.js']).map(f => t.path + f));
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.allSettled([...CORE, ...TOOL_FILES].map(f => c.add(f))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -13,16 +24,15 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Önce ağdan dene (güncellemeler hemen gelsin), olmazsa önbellekten ver
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request)
       .then(r => {
-        const copy = r.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
+        if (r && r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
         return r;
       })
-      .catch(() => caches.match(e.request).then(m => m || caches.match('index.html')))
+      .catch(() => caches.match(e.request, { ignoreSearch: true }).then(m => m || caches.match('index.html')))
   );
 });

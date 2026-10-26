@@ -1,7 +1,7 @@
 {
-  "name": "Bütçem",
-  "short_name": "Bütçem",
-  "description": "Aylık gelir-gider ve bakiye takibi",
+  "name": "SKY",
+  "short_name": "SKY",
+  "description": "Kişisel araçlar: bütçe, mesai ve daha fazlası",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
