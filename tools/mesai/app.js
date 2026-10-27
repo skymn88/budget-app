@@ -1,10 +1,10 @@
 /* ===== Mesai aracı =====
    Veri modeli (localStorage 'mesai.v1'):
-   cfg:  { type:'daily|weekly|monthly', hours, workdays:[0-6], lunchFrom, lunchTo, lunch, lunchFri }
+   cfg:  { type:'daily|weekly|monthly', hours, workdays:[0-6], lunchFrom, lunchTo, lunch, lunchFri, snap, inFrom, inTo, outFrom, outTo }
    days: { 'YYYY-MM-DD': { in:ms, out:ms|null, breaks:[{id,s,e,t:'break|lunch'}], off:bool, override:dakika|null } }
 */
 const KEY='mesai.v1';
-const DEF={cfg:{type:'daily',hours:8,workdays:[1,2,3,4,5],lunchFrom:'11:30',lunchTo:'14:30',lunch:60,lunchFri:90},days:{}};
+const DEF={cfg:{type:'daily',hours:8,workdays:[1,2,3,4,5],lunchFrom:'11:30',lunchTo:'14:30',lunch:60,lunchFri:90,snap:true,inFrom:'06:45',inTo:'07:30',outFrom:'16:30',outTo:'17:00'},days:{}};
 const fresh=()=>JSON.parse(JSON.stringify(DEF));
 function load(){
   try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.days){s.cfg=Object.assign({},DEF.cfg,s.cfg||{});return s}}catch(e){}
@@ -53,6 +53,18 @@ function autoCut(g){
   if(g<=660)return 60;   /* 7:31 – 11:00  */
   return 90;             /* 11:01 ve üstü */
 }
+/* giriş/çıkış toleransı (uçlar dahil değil, dakika bazında):
+   giriş inFrom–inTo arasındaysa inTo, çıkış outFrom–outTo arasındaysa outFrom sayılır; aradaki süre boşa gider */
+function snapIn(k,ts){
+  const c=S.cfg;if(!c.snap)return ts;
+  const f=minOf(tsOf(k,c.inFrom)),t=minOf(tsOf(k,c.inTo)),x=minOf(ts);
+  return(x>f&&x<t)?tsOf(k,c.inTo):ts;
+}
+function snapOut(k,ts){
+  const c=S.cfg;if(!c.snap)return ts;
+  const f=minOf(tsOf(k,c.outFrom)),t=minOf(tsOf(k,c.outTo)),x=minOf(ts);
+  return(x>f&&x<t)?tsOf(k,c.outFrom):ts;
+}
 /* öğle arası cezası: aralığın [lunchFrom, lunchTo] içine düşen kısmının, süre hakkı kadarı ücretsiz; geri kalanı ceza */
 function lunchPen(k,s,e){
   const dur=minOf(e)-minOf(s);
@@ -63,14 +75,17 @@ function lunchPen(k,s,e){
 }
 function calcDay(k,d,now){
   now=now||Date.now();
-  const r={has:false,gross:0,auto:0,breakPen:0,lunchPen:0,breakMin:0,lunchMin:0,calc:0,net:0,override:null,off:false,open:false,missingOut:false};
+  const r={has:false,gross:0,auto:0,breakPen:0,lunchPen:0,breakMin:0,lunchMin:0,calc:0,net:0,override:null,off:false,open:false,missingOut:false,rawGross:0,wasted:0,effIn:null,effOut:null};
   if(!d)return r;
   r.off=!!d.off;r.override=(d.override==null||isNaN(d.override))?null:d.override;
   if(d.in){
     r.has=true;
     let end=d.out;
     if(!end){if(k===todayK()){end=now;r.open=true}else{end=d.in;r.missingOut=true}}
-    r.gross=Math.max(0,minOf(end)-minOf(d.in));
+    r.effIn=snapIn(k,d.in);r.effOut=r.missingOut?end:snapOut(k,end);
+    r.rawGross=Math.max(0,minOf(end)-minOf(d.in));
+    r.gross=Math.max(0,minOf(r.effOut)-minOf(r.effIn));
+    r.wasted=Math.max(0,r.rawGross-r.gross);
     r.auto=r.gross>0?autoCut(r.gross):0;
     (d.breaks||[]).forEach(b=>{
       const e=Math.max(b.e||end,b.s),dur=minOf(e)-minOf(b.s);
@@ -132,6 +147,7 @@ function render(){
 const go=v=>{view=v;render();document.getElementById('main').scrollTop=0};
 const goD=n=>{D=addD(D,n);render()};
 const setD=v=>{if(/^\d{4}-\d{2}-\d{2}$/.test(v)){D=v;render()}};
+function hdChg(){const v=dateVal('hd');if(v===null){toast('Tarih biçimi: 25.10.2026');render();return}if(v)setD(v)}
 
 function rowDay(k,fn){
   const r=calc(k),d=S.days[k],tar=dayTarget(k),future=k>todayK();
@@ -150,7 +166,7 @@ function vHome(){
   const r=calc(D),keys=keysFor(t,D),sm=sumKeys(keys),rem=sm.tar-sm.net;
   const pct=sm.tar>0?Math.min(100,Math.round(sm.net/sm.tar*100)):(sm.net>0?100:0);
   const working=!!(d&&d.in&&!d.out),done=!!(d&&d.in&&d.out);
-  let h=`<div class="dn"><button class="nb" onclick="goD(-1)">‹</button><input type="date" value="${D}" onchange="setD(this.value)"><button class="nb" onclick="goD(1)">›</button></div>`;
+  let h=`<div class="dn"><button class="nb" onclick="goD(-1)">‹</button>${dateInput('hd',D,'hdChg()')}<button class="nb" onclick="goD(1)">›</button></div>`;
   if(!isT)h+=`<div style="text-align:center;margin:-4px 0 12px"><button class="chipbtn" onclick="setD(todayK())">Bugüne dön</button></div>`;
   h+=`<div class="card hero"><small>${typeName[t]} mesai · ${esc(periodLabel(t,D))}</small>
     <div class="big">${fm(sm.net)} <span class="of">/ ${fm(sm.tar)}</span></div>
@@ -164,8 +180,9 @@ function vHome(){
   h+=`<h2>${esc(dLabel(D)).toLocaleUpperCase('tr-TR')}${r.off?' · İZİNLİ':''}</h2><div class="card">`;
   if(!r.has)h+=`<div class="empty" style="padding:10px 0">Bu gün için kayıt yok</div>`;
   else{
-    h+=`<div class="kv"><span>Giriş</span><b>${d&&d.in?hm(d.in):'—'}</b></div>
-    <div class="kv"><span>Çıkış</span><b>${d&&d.out?hm(d.out):(r.open?'devam ediyor':r.missingOut?'<span style="color:var(--warn)">girilmedi</span>':'—')}</b></div>
+    h+=`<div class="kv"><span>Giriş</span><b>${d&&d.in?hm(d.in)+(r.effIn&&r.effIn!==d.in?` <small>→ ${hm(r.effIn)} sayılır</small>`:''):'—'}</b></div>
+    <div class="kv"><span>Çıkış</span><b>${d&&d.out?hm(d.out)+(r.effOut!==d.out?` <small>→ ${hm(r.effOut)} sayılır</small>`:''):(r.open?'devam ediyor':r.missingOut?'<span style="color:var(--warn)">girilmedi</span>':'—')}</b></div>
+    ${r.wasted?`<div class="kv"><span>Boşa giden süre <small>(tolerans)</small></span><b class="exp">−${fdur(r.wasted)}</b></div>`:''}
     <div class="kv"><span>Brüt süre</span><b>${fm(r.gross)}</b></div>
     <div class="kv"><span>Otomatik kesinti${cut?` <small>(${cut})</small>`:''}</span><b class="${r.auto?'exp':''}">${r.auto?'−'+fdur(r.auto):'—'}</b></div>
     <div class="kv"><span>Mola cezası <small>(${fdur(r.breakMin)} mola)</small></span><b class="${r.breakPen?'exp':''}">${r.breakPen?'−'+fdur(r.breakPen):'—'}</b></div>
@@ -224,22 +241,39 @@ function vSet(){
   const c=S.cfg,n=c.workdays.length;
   return `<div class="card"><label style="margin-top:0">Mesai tipi</label>
     <div class="seg">${['daily','weekly','monthly'].map(t=>`<button class="${c.type===t?'on':''}" onclick="setCfg('type','${t}')">${typeName[t]}</button>`).join('')}</div>
-    <div class="hint">Günlük: her gün ${c.hours} saat · Haftalık: ${n} gün × ${c.hours} = ${n*c.hours} saat · Aylık: o ayın çalışma günü × ${c.hours} saat.</div>
-    <label>Günlük çalışma süresi (saat)</label><input type="number" step="0.25" min="0" value="${c.hours}" onchange="setCfg('hours',+this.value)">
+    <div class="hint" id="cfgHint">${cfgHint()}</div>
+    <label>Günlük çalışma süresi (saat)</label><input type="number" inputmode="decimal" step="0.25" min="0" value="${c.hours}" onchange="setCfg('hours',+this.value,1)">
     <label>Çalışma günleri</label><div class="days">${[1,2,3,4,5,6,0].map(i=>`<button class="dchip ${c.workdays.includes(i)?'on':''}" onclick="togDay(${i})">${DS[i]}</button>`).join('')}</div>
   </div>
   <h2>ÖĞLE ARASI</h2><div class="card">
-    <div class="two"><div><label style="margin-top:0">Aralık başlangıcı</label><input type="time" value="${c.lunchFrom}" onchange="setCfg('lunchFrom',this.value)"></div><div><label style="margin-top:0">Aralık bitişi</label><input type="time" value="${c.lunchTo}" onchange="setCfg('lunchTo',this.value)"></div></div>
-    <div class="two"><div><label>Süre (dk)</label><input type="number" min="0" value="${c.lunch}" onchange="setCfg('lunch',+this.value)"></div><div><label>Cuma süresi (dk)</label><input type="number" min="0" value="${c.lunchFri}" onchange="setCfg('lunchFri',+this.value)"></div></div>
+    <div class="two"><div><label style="margin-top:0">Aralık başlangıcı</label>${timeInput('cf_lf',c.lunchFrom,"cfgTime('lunchFrom','cf_lf')")}</div><div><label style="margin-top:0">Aralık bitişi</label>${timeInput('cf_lt',c.lunchTo,"cfgTime('lunchTo','cf_lt')")}</div></div>
+    <div class="two"><div><label>Süre (dk)</label><input type="number" min="0" value="${c.lunch}" onchange="setCfg('lunch',+this.value,1)"></div><div><label>Cuma süresi (dk)</label><input type="number" min="0" value="${c.lunchFri}" onchange="setCfg('lunchFri',+this.value,1)"></div></div>
     <div class="hint">Öğle arasının bu aralığa düşen kısmının, süre hakkı kadarı ücretsizdir; fazlası ve aralık dışında kalan kısım mesaiden düşer. Günde yalnızca 1 öğle arası sayılır.</div></div>
+  <h2>GİRİŞ / ÇIKIŞ TOLERANSI</h2><div class="card">
+    <label class="chk" style="margin-top:0"><input type="checkbox" ${c.snap?'checked':''} onchange="setCfg('snap',this.checked)"> Tolerans kuralı açık</label>
+    <div class="two"><div><label>Giriş aralığı başı</label>${timeInput('cf_if',c.inFrom,"cfgTime('inFrom','cf_if')")}</div><div><label>Giriş aralığı sonu (sayılan)</label>${timeInput('cf_it',c.inTo,"cfgTime('inTo','cf_it')")}</div></div>
+    <div class="two"><div><label>Çıkış aralığı başı (sayılan)</label>${timeInput('cf_of',c.outFrom,"cfgTime('outFrom','cf_of')")}</div><div><label>Çıkış aralığı sonu</label>${timeInput('cf_ot',c.outTo,"cfgTime('outTo','cf_ot')")}</div></div>
+    <div class="hint" id="snapHint">${snapHint()}</div></div>
   <h2>OTOMATİK KESİNTİ (giriş-çıkış arası brüt süreye göre)</h2><div class="card"><table class="tbl">
     <tr><td>0:00 – 4:00</td><td>−15 dk</td></tr><tr><td>4:01 – 7:30</td><td>−30 dk</td></tr><tr><td>7:31 – 11:00</td><td>−1 saat</td></tr><tr><td>11:01 ve üstü</td><td>−1,5 saat</td></tr></table></div>
   <button class="btn del" onclick="resetMesai()">Mesai verilerini sil</button>`;
 }
-function setCfg(key,val){
+const cfgHint=()=>{const c=S.cfg,n=c.workdays.length;return `Günlük: her gün ${c.hours} saat · Haftalık: ${n} gün × ${c.hours} = ${n*c.hours} saat · Aylık: o ayın çalışma günü × ${c.hours} saat.`};
+const snapHint=()=>{const c=S.cfg;return `Giriş ${c.inFrom}–${c.inTo} arasındaysa ${c.inTo} giriş, çıkış ${c.outFrom}–${c.outTo} arasındaysa ${c.outFrom} çıkış sayılır; aradaki süre boşa gider. Uçlar dahil değil: tam ${c.inFrom} veya ${c.inTo} girişi, tam ${c.outFrom} veya ${c.outTo} çıkışı değişmez.`};
+/* keep=1: kutu yazılırken sayfa yeniden çizilmez (klavye ve odak kaybolmasın) */
+function setCfg(key,val,keep){
   if(typeof val==='number'&&(isNaN(val)||val<0))return toast('Geçersiz değer');
-  if((key==='lunchFrom'||key==='lunchTo')&&!val)return;
-  S.cfg[key]=val;P=null;persist();render();
+  S.cfg[key]=val;P=null;persist();
+  if(keep){const h=document.getElementById('cfgHint');if(h)h.innerHTML=cfgHint();toast('Kaydedildi')}else render();
+}
+function cfgTime(key,id){
+  const el=document.getElementById(id),v=timeVal(id),c=S.cfg;
+  if(!v){toast('Saat biçimi: 08:30');el.value=c[key];return}
+  const n=Object.assign({},c,{[key]:v});
+  if(n.lunchFrom>=n.lunchTo||n.inFrom>=n.inTo||n.outFrom>=n.outTo){toast('Başlangıç, bitişten önce olmalı');el.value=c[key];return}
+  c[key]=v;el.value=v;persist();
+  const h=document.getElementById('snapHint');if(h)h.innerHTML=snapHint();
+  toast('Kaydedildi');
 }
 function togDay(i){
   const a=S.cfg.workdays,j=a.indexOf(i);
@@ -255,18 +289,23 @@ let BE=null;
 const listFor=(mode,k)=>mode==='draft'?E.breaks:((S.days[k]&&S.days[k].breaks)||[]);
 function setList(mode,k,arr){if(mode==='draft')E.breaks=arr;else S.days[k].breaks=arr}
 function editBreak(k,id,mode){
+  if(mode==='draft')syncE();
   const b=listFor(mode,k).find(x=>x.id===id);if(!b)return;
   BE={k,id,mode,s:hm(b.s),e:b.e?hm(b.e):'',t:b.t};renderBE();
 }
 function renderBE(){
   const others=listFor(BE.mode,BE.k).some(b=>b.t==='lunch'&&b.id!==BE.id);
   showSheet(`<h3>Mola düzenle</h3>
-  <div class="seg"><button class="${BE.t==='break'?'on':''}" onclick="BE.t='break';renderBE()">☕ Mola</button><button class="${BE.t==='lunch'?'on':''}" ${others?'disabled style="opacity:.4"':''} onclick="BE.t='lunch';renderBE()">🍽️ Öğle arası</button></div>
+  <div class="seg"><button class="${BE.t==='break'?'on':''}" onclick="syncBE();BE.t='break';renderBE()">☕ Mola</button><button class="${BE.t==='lunch'?'on':''}" ${others?'disabled style="opacity:.4"':''} onclick="syncBE();BE.t='lunch';renderBE()">🍽️ Öğle arası</button></div>
   ${others?'<div class="hint" style="margin-top:-4px">Bu günde zaten bir öğle arası var.</div>':''}
-  <div class="two"><div><label style="margin-top:0">Çıkış</label><input type="time" value="${BE.s}" onchange="BE.s=this.value"></div><div><label style="margin-top:0">Dönüş (boşsa devam)</label><input type="time" value="${BE.e}" onchange="BE.e=this.value"></div></div>
+  <div class="two"><div><label style="margin-top:0">Çıkış</label>${timeInput('b_s',BE.s)}</div><div><label style="margin-top:0">Dönüş (boşsa devam)</label>${timeInput('b_e',BE.e)}</div></div>
   <button class="btn" onclick="saveBE()">Kaydet</button><button class="btn del" onclick="delBE()">Sil</button><button class="btn sec" onclick="backBE()">Vazgeç</button>`);
 }
+function syncBE(){const s=timeVal('b_s'),e=timeVal('b_e');if(s!==null)BE.s=s;if(e!==null)BE.e=e}
 function saveBE(){
+  const s0=timeVal('b_s'),e0=timeVal('b_e');
+  if(s0===null||e0===null)return toast('Saat biçimi: 08:30');
+  BE.s=s0;BE.e=e0;
   if(!BE.s)return toast('Çıkış saati gerekli');
   const s=tsOf(BE.k,BE.s),e=BE.e?tsOf(BE.k,BE.e):null;
   if(e!=null&&e<s)return toast('Dönüş, çıkıştan önce olamaz');
@@ -292,28 +331,50 @@ function draftDay(){
   const ov=parseHM(E.ov);
   return {in:E.in?tsOf(E.k,E.in):null,out:E.out?tsOf(E.k,E.out):null,off:E.off,override:(ov==null||isNaN(ov))?null:ov,breaks:E.breaks};
 }
+function autoHint(){
+  const a=calcDay(E.k,Object.assign(draftDay(),{override:null}));
+  return `Otomatik hesap: <b>${fm(a.calc)}</b> (brüt ${fm(a.gross)} − kesinti ${fdur(a.auto)} − mola ${fdur(a.breakPen)} − öğle cezası ${fdur(a.lunchPen)})${a.wasted?` · tolerans: ${fdur(a.wasted)} boşa gider`:''}`;
+}
+/* kutudaki saatleri E'ye aktar (odak kaybolmadan, yeniden çizmeden) */
+function syncE(){const a=timeVal('e_in'),b=timeVal('e_out');if(a!==null)E.in=a;if(b!==null)E.out=b}
+/* yazarken sessizce ipucunu güncelle (geçersiz/eksik saatte dokunma) */
+function edLive(){
+  const a=timeVal('e_in'),b=timeVal('e_out');
+  if(a===null||b===null)return;
+  E.in=a;E.out=b;
+  const h=document.getElementById('autoHint');if(h)h.innerHTML=autoHint();
+}
+function edTime(){
+  const a=timeVal('e_in'),b=timeVal('e_out');
+  if(a===null||b===null){toast('Saat biçimi: 08:30');return}
+  E.in=a;E.out=b;
+  const h=document.getElementById('autoHint');if(h)h.innerHTML=autoHint();
+}
 function renderEdit(){
-  const auto=calcDay(E.k,Object.assign(draftDay(),{override:null}));
   const list=E.breaks.slice().sort((a,b)=>a.s-b.s);
   showSheet(`<h3>${esc(dLabel(E.k))}</h3>
-  <div class="two"><div><label style="margin-top:0">Giriş</label><input type="time" value="${E.in}" onchange="E.in=this.value;renderEdit()"></div><div><label style="margin-top:0">Çıkış</label><input type="time" value="${E.out}" onchange="E.out=this.value;renderEdit()"></div></div>
+  <div class="two"><div><label style="margin-top:0">Giriş</label>${timeInput('e_in',E.in,'edTime()','edLive()')}</div><div><label style="margin-top:0">Çıkış</label>${timeInput('e_out',E.out,'edTime()','edLive()')}</div></div>
   <label class="chk"><input type="checkbox" ${E.off?'checked':''} onchange="E.off=this.checked"> İzinli / resmi tatil (hedef 0)</label>
   <label>Mola ve öğle arası</label>
   <div class="card" style="margin-bottom:6px;padding:6px 14px">${list.length?list.map(b=>rowBreak(E.k,b,'draft')).join(''):'<div class="empty" style="padding:12px 0">Kayıtlı ara yok</div>'}</div>
   <button class="btn sec" style="margin-top:0" onclick="addBreakDraft()">+ Mola ekle</button>
   <label>Net mesai (elle) — boşsa otomatik hesap kullanılır</label>
   <input value="${esc(E.ov)}" oninput="E.ov=this.value" placeholder="örn. 7:02">
-  <div class="hint">Otomatik hesap: <b>${fm(auto.calc)}</b> (brüt ${fm(auto.gross)} − kesinti ${fdur(auto.auto)} − mola ${fdur(auto.breakPen)} − öğle cezası ${fdur(auto.lunchPen)})</div>
+  <div class="hint" id="autoHint">${autoHint()}</div>
   <button class="btn" onclick="saveDay()">Kaydet</button>
   <button class="btn del" onclick="clearDay()">Günün kaydını sil</button>
   <button class="btn sec" onclick="closeSheet()">Vazgeç</button>`);
 }
 function addBreakDraft(){
+  syncE();
   const s=tsOf(E.k,'12:00'),id=uid();
   E.breaks.push({id,s,e:s+15*60000,t:'break'});
   editBreak(E.k,id,'draft');
 }
 function saveDay(){
+  const ti=timeVal('e_in'),to=timeVal('e_out');
+  if(ti===null||to===null)return toast('Saat biçimi: 08:30');
+  E.in=ti;E.out=to;
   const k=E.k,tin=E.in?tsOf(k,E.in):null,tout=E.out?tsOf(k,E.out):null;
   if(tout&&!tin)return toast('Çıkış için giriş saati gerekli');
   if(tout&&tin&&tout<=tin)return toast('Çıkış, girişten sonra olmalı');
@@ -324,6 +385,7 @@ function saveDay(){
   persist();closeSheet();render();toast('Kaydedildi');
 }
 function clearDay(){
+  syncE();
   const k=E.k;
   ask('Bu günün tüm kaydı silinsin mi?','Evet, sil',()=>{delete S.days[k];persist();closeSheet();render();toast('Silindi')},renderEdit);
 }

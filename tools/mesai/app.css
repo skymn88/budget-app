@@ -1,7 +1,7 @@
 /* Mesai aracına özel stiller */
 .dn{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .dn .nb{width:44px;height:44px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:22px;flex:none}
-.dn input[type=date]{flex:1;text-align:center;font-weight:700;min-width:0}
+.dn input{flex:1;text-align:center;font-weight:700;min-width:0}
 .chipbtn{border:1px solid var(--line);background:var(--card);color:var(--pri);padding:8px 14px;border-radius:99px;font-size:14px;font-weight:600}
 .two2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .bigbtn{width:100%;padding:22px 10px;border-radius:20px;border:0;font-size:19px;font-weight:800;color:#fff;margin-bottom:12px;box-shadow:0 6px 16px rgba(0,0,0,.18)}

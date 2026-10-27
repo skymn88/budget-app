@@ -116,7 +116,7 @@ function vFc(){
 }
 function vSet(){
   return `<div class="card"><label style="margin-top:0">Başlangıç bakiyesi (₺) · Öngörü'deki birikmiş toplam için</label><input id="ob" inputmode="decimal" value="${S.opening||''}" placeholder="0">
-    <label>Birikim hangi aydan başlasın?</label><input id="om" type="month" value="${S.openingMonth}">
+    <label>Birikim hangi aydan başlasın?</label>${monthSelect('om',S.openingMonth,false,'')}
     <button class="btn" onclick="saveSet()">Kaydet</button></div>
   <h2>YEDEK</h2><div class="card">
     <div class="sub" style="margin-bottom:8px">Veriler yalnızca bu telefonun tarayıcısında durur. Düzenli yedek almanı öneririm. Tüm araçların yedeğini SKY ana ekranındaki Ayarlar'dan da alabilirsin.</div>
@@ -129,7 +129,7 @@ function vSet(){
 }
 function saveSet(){
   const v=num(document.getElementById('ob').value);
-  S.opening=isNaN(v)?0:v;S.openingMonth=document.getElementById('om').value||ymOf(new Date());
+  S.opening=isNaN(v)?0:v;S.openingMonth=monthVal('om')||ymOf(new Date());
   persist();toast('Kaydedildi');
 }
 function exportData(){
@@ -184,14 +184,14 @@ function renderSheet(){
       .map(([v,t])=>`<option value="${v}" ${+f.every===v?'selected':''}>${t}</option>`).join('');
     const act=f.start&&isActive({start:f.start,end:f.end||null,every:+f.every||1},M);
     h+=`<label>Sıklık</label><select onchange="F.every=+this.value;renderSheet()">${opts}</select>
-    <div class="two"><div><label>Ayın kaçıncı günü</label><input type="number" min="1" max="31" value="${f.day}" oninput="F.day=this.value"></div>
-    <div><label>Başlangıç ayı</label><input type="month" value="${f.start}" onchange="F.start=this.value;renderSheet()"></div></div>
-    <label>Son ay (boşsa süresiz)</label><input type="month" value="${f.end}" onchange="F.end=this.value;renderSheet()">
+    <label>Ayın kaçıncı günü</label><input type="number" inputmode="numeric" min="1" max="31" value="${f.day}" oninput="F.day=this.value">
+    <label>Başlangıç ayı</label>${monthSelect('fs',f.start,false,"F.start=monthVal('fs')")}
+    <label>Son ay</label>${monthSelect('fe',f.end,true,"F.end=monthVal('fe')")}
     <div class="hint">Başlangıç ayı ilk gerçekleşme ayıdır, sonra seçilen sıklıkta tekrar eder. Çift maaş gibi ek gelirler için ayrı bir düzenli gelir ekleyip "6 ayda bir" seçebilirsin.</div>`;
     h+=act?`<label>Gerçekleşen — ${label(M)} (boşsa girilmedi)</label><input inputmode="decimal" value="${f.actual}" oninput="F.actual=this.value" placeholder="Beklenenden farklıysa yaz">`
       :`<div class="hint">Bu kalem ${label(M)} ayında geçerli değil, o yüzden gerçek değer girilemez. Ay seçerek ilgili aya git.</div>`;
   }else{
-    h+=`<label>Tarih</label><input type="date" value="${f.date}" onchange="F.date=this.value">`;
+    h+=`<label>Tarih</label>${dateInput('fd',f.date,'dateChg()')}`;
   }
   h+=`<button class="btn" onclick="save()">Kaydet</button>`;
   if(f.edit&&f.rec)h+=`<button class="btn sec" onclick="endHere()">${label(M)} ayından itibaren bitir</button><button class="btn del" onclick="delRec()">Tamamen sil</button>`;
@@ -199,6 +199,7 @@ function renderSheet(){
   h+=`<button class="btn sec" onclick="closeSheet()">Vazgeç</button>`;
   document.getElementById('sheet').innerHTML=h;
 }
+function dateChg(){const v=dateVal('fd');if(v===null){toast('Tarih biçimi: 25.10.2026');return}if(v)F.date=v}
 function save(){
   const amt=num(F.amount);
   if(!F.name.trim()||isNaN(amt)){toast('Ad ve tutar gerekli');return}
@@ -212,6 +213,9 @@ function save(){
     const k=M+'|'+r.id,a=num(F.actual);
     if(isNaN(a)||!isActive(r,M))delete S.actuals[k];else S.actuals[k]=a;
   }else{
+    const dv=dateVal('fd');
+    if(dv===null){toast('Tarih biçimi: 25.10.2026');return}
+    if(dv)F.date=dv;
     if(!F.date){toast('Tarih gerekli');return}
     if(F.edit){Object.assign(S.oneoff.find(x=>x.id===F.id),{type:F.type,name:F.name.trim(),cat:F.cat,amount:amt,date:F.date})}
     else S.oneoff.push({id:uid(),type:F.type,name:F.name.trim(),cat:F.cat,amount:amt,date:F.date});

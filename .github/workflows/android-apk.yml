@@ -30,6 +30,19 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Sabit imza anahtarını yerleştir ve doğrula
+        env:
+          KS: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KS" ]; then
+            echo "::error::DEBUG_KEYSTORE_BASE64 secret'ı tanımlı değil. Anahtar sabit olmazsa her derleme farklı imzalanır ve APK güncellemesi kurulamaz. README'deki 'sabit imza' bölümüne bak."
+            exit 1
+          fi
+          mkdir -p ~/.android
+          echo "$KS" | base64 -d > ~/.android/debug.keystore
+          keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey > /dev/null
+          echo "Sabit anahtar kullanılıyor."
+
       - name: Bağımlılıkları kur
         run: npm install
 
@@ -57,27 +70,53 @@ jobs:
       - name: Sürüm numarasını her derlemede artır
         run: sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
 
-      - name: Sabit imza anahtarını yerleştir (secret tanımlıysa)
-        env:
-          KS: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+      - name: Release derlemesini sabit anahtarla imzala
         run: |
-          if [ -n "$KS" ]; then
-            mkdir -p ~/.android
-            echo "$KS" | base64 -d > ~/.android/debug.keystore
-            echo "Sabit anahtar kullanılıyor."
-          else
-            echo "Secret yok, geçici anahtar kullanılacak."
-          fi
+          cat >> android/app/build.gradle <<'EOF'
+
+          android {
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                  }
+              }
+              lint {
+                  checkReleaseBuilds false
+                  abortOnError false
+              }
+          }
+          EOF
 
       - name: Web dosyalarını Android projesine aktar
         run: npx cap sync android
 
-      - name: APK derle
+      - name: APK derle (release; olmazsa debug)
         working-directory: android
-        run: ./gradlew assembleDebug
+        run: |
+          if ./gradlew assembleRelease; then
+            echo "APK_PATH=android/app/build/outputs/apk/release/app-release.apk" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Release derlemesi başarısız oldu, debug derlemesi kullanılıyor."
+            ./gradlew assembleDebug
+            echo "APK_PATH=android/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          fi
 
       - name: APK dosyasını adlandır
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk sky.apk
+        run: cp "$GITHUB_WORKSPACE/$APK_PATH" sky.apk
+
+      - name: İmza parmak izini al
+        id: sig
+        run: |
+          BT=$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          SHA=""
+          if [ -n "$BT" ] && [ -x "$BT/apksigner" ]; then
+            SHA=$("$BT/apksigner" verify --print-certs sky.apk 2>/dev/null | grep -m1 'SHA-256' | sed 's/.*: *//') || true
+          fi
+          if [ -z "$SHA" ]; then
+            SHA=$(keytool -printcert -jarfile sky.apk 2>/dev/null | grep -m1 'SHA256:' | sed 's/.*SHA256: *//') || true
+          fi
+          echo "İmza SHA-256: $SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Çıktı olarak yükle
         uses: actions/upload-artifact@v4
@@ -97,11 +136,10 @@ jobs:
         with:
           tag_name: latest
           name: Son APK
-          body: "Her güncellemede otomatik derlenen son APK. Derleme numarası: ${{ github.run_number }}"
+          body: |
+            Her güncellemede otomatik derlenen son APK. Derleme numarası: ${{ github.run_number }}
+            İmza SHA-256: ${{ steps.sig.outputs.sha }}
+
+            Güncelleme kurulamazsa: imza parmak izi önceki sürümle aynı olmalıdır. Farklıysa eski uygulamayı bir kez kaldırıp yenisini kur (önce Ayarlar'dan yedek al).
           files: sky.apk
           make_latest: true
-
-      - name: Eski adlı APK dosyasını release'ten kaldır (varsa)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release delete-asset latest butcem.apk --yes || true

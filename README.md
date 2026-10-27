@@ -67,7 +67,13 @@ Bunu önlemek için sabit bir anahtar tanımla:
 2. Depoda **Settings → Secrets and variables → Actions → New repository secret** bölümüne git.
 3. Adı `DEBUG_KEYSTORE_BASE64`, değeri bu metin olsun.
 
-Secret tanımlıysa iş akışı onunla imzalar, tanımlı değilse geçici anahtara döner. Derleme numarası her seferinde otomatik artırılır.
+Secret tanımlı değilse derleme **bilerek hata verir**; böylece farklı anahtarla imzalanmış, güncellenemeyen bir APK yanlışlıkla yayınlanmaz. Derleme numarası (`versionCode`) her seferinde otomatik artırılır. APK, debug yerine **release** olarak derlenir (hata ayıklama bayrağı kapalı) ve aynı anahtarla imzalanır; böylece mevcut kurulumların üstüne güncelleme olarak kurulabilir. Release derlemesi başarısız olursa iş akışı uyarı verip debug derlemesine döner.
+
+### Güncelleme kurulamıyorsa / Play Protect uyarısı
+
+- **İmza parmak izini karşılaştır:** Her derleme, "Son APK" sürümünün açıklamasına `İmza SHA-256` değerini yazar. Bu değer önceki sürümle **aynıysa** güncelleme kurulabilir. Farklıysa (örneğin ilk APK secret eklenmeden önce derlenmişse) Android güncellemeyi reddeder. Çözüm: Ayarlar'dan yedek al, eski uygulamayı bir kez kaldır, yeni APK'yı kur, yedeği geri yükle. Anahtar sabit kaldığı sürece bu bir daha gerekmez.
+- **Play Protect uyarısı:** APK Google Play dışından yüklendiği için Play Protect "tanınmayan uygulama" uyarısı gösterebilir. **Yine de yükle** (veya **Uygulamayı tara**) seçilir. Bu uyarıyı tamamen kaldırmanın tek yolu uygulamayı Google Play'e yüklemektir; kod tarafında kapatılamaz. Release derlemesi ve sabit imza, uyarıyı azaltmak için yapılabilecek en iyi şeydir.
+- Hata devam ederse Android'in verdiği tam mesajı not et (ör. "paket çakışıyor", "Uygulama yüklenmedi", "engellendi").
 
 ### Güvenlik notları
 
@@ -82,6 +88,7 @@ Secret tanımlıysa iş akışı onunla imzalar, tanımlı değilse geçici anah
 - **SKY → Ayarlar** ekranından tüm araçların verisi tek JSON dosyasında yedeklenip geri yüklenebilir. Eski, yalnızca bütçe yedekleri de yüklenebilir.
 - **PWA ve APK sürümlerinin verileri birbirinden ayrıdır.** Birinden diğerine geçerken yedek alıp diğerinde yükle.
 - Tarayıcı verisi silinirse veya telefon değiştirilirse kayıtlar gider. Düzenli yedek almanı öneririm.
+- **Saat, tarih ve ay alanları** Android WebView'da güvenilir açılmadığı için `type=time/date/month` yerine sayısal klavyeli metin kutuları (`0830` yazınca `08:30` olur, `25102026` yazınca `25.10.2026`) ve ay/yıl seçim kutuları kullanılır.
 - Web verisi sitenin alan adına (`KULLANICI.github.io`) bağlıdır, depo adına değil. Aynı hesaptaki diğer GitHub Pages siteleri aynı depolama alanını paylaşır; başka bir projede aynı anahtarları kullanma.
 
 ## Yerelde çalıştırma
@@ -127,9 +134,10 @@ capacitor.config.json   APK ayarları (uygulama adı: SKY)
 
 ### Mesai
 
-**Net mesai = brüt süre − otomatik kesinti − mola cezaları − öğle arası cezası**
+**Net mesai = sayılan süre − otomatik kesinti − mola cezaları − öğle arası cezası**
 
-- **Brüt süre:** giriş ile çıkış arası.
+- **Giriş/çıkış toleransı:** 06:45–07:30 arasındaki bir giriş 07:30, 16:30–17:00 arasındaki bir çıkış 16:30 sayılır; aradaki süre boşa gider. **Uçlar dahil değildir:** tam 06:45 veya 07:30 girişi, tam 16:30 veya 17:00 çıkışı değişmez (dakika bazında karşılaştırılır). Aralıklar ve kuralın açık/kapalı durumu Ayarlar'dan değiştirilebilir. Örnek: 07:10 giriş + 16:45 çıkış → 07:30–16:30 sayılır.
+- **Sayılan (brüt) süre:** tolerans uygulandıktan sonraki giriş ile çıkış arası. Otomatik kesinti bu süreye göre belirlenir.
 - **Otomatik kesinti** (brüt süreye göre, sınırlar dahil): 0:00–4:00 → 15 dk · 4:01–7:30 → 30 dk · 7:31–11:00 → 1 saat · 11:01 ve üstü → 1,5 saat.
 - **Normal mola:** süresinin tamamı mesaiden düşer (ör. 15:00–15:31 → 31 dk).
 - **Öğle arası:** 11:30–14:30 aralığında 1 saat (Cuma 1,5 saat) ücretsizdir; fazlası ve aralık dışında kalan kısım düşer (ör. 11:30–12:31 → 1 dk). Günde yalnızca 1 öğle arası sayılır. Süreler ve aralık Ayarlar'dan değiştirilebilir.

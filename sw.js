@@ -3,7 +3,7 @@
    Araç dosyaları shared/tools.js listesinden otomatik önbelleğe alınır. */
 importScripts('shared/tools.js');
 
-const CACHE = 'sky-v1';
+const CACHE = 'sky-v2';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png',
   'shared/theme.css', 'shared/common.js', 'shared/tools.js'];
 const TOOL_FILES = TOOLS.flatMap(t => (t.files || ['index.html', 'app.js']).map(f => t.path + f));
