@@ -41,6 +41,7 @@ jobs:
           mkdir -p ~/.android
           echo "$KS" | base64 -d > ~/.android/debug.keystore
           keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey > /dev/null
+          echo "KS_FILE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
           echo "Sabit anahtar kullanılıyor."
 
       - name: Bağımlılıkları kur
@@ -70,14 +71,22 @@ jobs:
       - name: Sürüm numarasını her derlemede artır
         run: sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
 
-      - name: Release derlemesini sabit anahtarla imzala
+      - name: Release derlemesini secret'taki anahtarla imzala (açıkça tanımlı)
         run: |
           cat >> android/app/build.gradle <<'EOF'
 
           android {
+              signingConfigs {
+                  skyRelease {
+                      storeFile file(System.getenv('KS_FILE'))
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
               buildTypes {
                   release {
-                      signingConfig signingConfigs.debug
+                      signingConfig signingConfigs.skyRelease
                   }
               }
               lint {
@@ -117,6 +126,17 @@ jobs:
           fi
           echo "İmza SHA-256: $SHA"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          # APK'nın gerçekten secret'taki anahtarla imzalandığını doğrula; değilse yayınlama
+          KSSHA=$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey 2>/dev/null | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ':' | tr 'A-Z' 'a-z') || true
+          APKSHA=$(echo "$SHA" | tr -d ':' | tr 'A-Z' 'a-z')
+          if [ -z "$KSSHA" ] || [ -z "$APKSHA" ]; then
+            echo "::warning::İmza parmak izi karşılaştırılamadı (anahtar: '$KSSHA', APK: '$APKSHA')."
+          elif [ "$KSSHA" != "$APKSHA" ]; then
+            echo "::error::APK, secret'taki anahtarla imzalanmadı (anahtar: $KSSHA, APK: $APKSHA). Bu APK güncelleme olarak kurulamaz, yayınlanmadı."
+            exit 1
+          else
+            echo "APK imzası secret'taki anahtarla eşleşiyor."
+          fi
 
       - name: Çıktı olarak yükle
         uses: actions/upload-artifact@v4

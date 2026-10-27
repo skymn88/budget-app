@@ -67,7 +67,7 @@ Bunu önlemek için sabit bir anahtar tanımla:
 2. Depoda **Settings → Secrets and variables → Actions → New repository secret** bölümüne git.
 3. Adı `DEBUG_KEYSTORE_BASE64`, değeri bu metin olsun.
 
-Secret tanımlı değilse derleme **bilerek hata verir**; böylece farklı anahtarla imzalanmış, güncellenemeyen bir APK yanlışlıkla yayınlanmaz. Derleme numarası (`versionCode`) her seferinde otomatik artırılır. APK, debug yerine **release** olarak derlenir (hata ayıklama bayrağı kapalı) ve aynı anahtarla imzalanır; böylece mevcut kurulumların üstüne güncelleme olarak kurulabilir. Release derlemesi başarısız olursa iş akışı uyarı verip debug derlemesine döner.
+Secret tanımlı değilse derleme **bilerek hata verir**; böylece farklı anahtarla imzalanmış, güncellenemeyen bir APK yanlışlıkla yayınlanmaz. Derleme numarası (`versionCode`) her seferinde otomatik artırılır. APK, debug yerine **release** olarak derlenir (hata ayıklama bayrağı kapalı) ve aynı anahtarla imzalanır; böylece mevcut kurulumların üstüne güncelleme olarak kurulabilir. Release derlemesi başarısız olursa iş akışı uyarı verip debug derlemesine döner. İmza anahtarı Gradle'a **açıkça** tanımlanır ve derleme sonunda APK'nın gerçekten bu anahtarla imzalandığı doğrulanır; eşleşmiyorsa derleme hata verir ve APK yayınlanmaz (aksi halde Android her derlemeyi farklı bir uygulama sayar ve güncellemeyi reddeder).
 
 ### Güncelleme kurulamıyorsa / Play Protect uyarısı
 
